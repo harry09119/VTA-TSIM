@@ -196,6 +196,7 @@ with autotvm.tophub.context(target):
                 stop_name=pack_dict[model][1],
                 device_annot=(env.TARGET == "intelfocl"),
             )
+            print(relay_prog)
             print("> Pack resnet18 graph for VTA")
     else:
         relay_prog = mod["main"]

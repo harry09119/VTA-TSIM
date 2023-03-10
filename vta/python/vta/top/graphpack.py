@@ -500,6 +500,7 @@ def get_subgraph(expr, start_name, stop_name, start_name_idx, stop_name_idx, cou
             value = anf.value
             if isinstance(value, relay.expr.Call):
                 if isinstance(value.op, tvm.ir.Op):
+                    #print("> [",operator_current_idx,"]:",value.op.name)
                     if value.op.name == start_name and not start_found:
                         if operator_current_idx == start_name_idx or start_name_idx is None:
                             value = relay.expr.Call(bitpack_start, [value])
@@ -596,6 +597,9 @@ def graph_pack(
     expr : Expr
         The transformed expression.
     """
+    #print("> Graph_pack start!!!")
+    #print("===Original==Expr====")
+    #print(expr)
     assert isinstance(expr, relay.Function)
     assert (
         (start_name != stop_name)
@@ -603,12 +607,29 @@ def graph_pack(
         or (not (start_name_idx is None and stop_name_idx is None))
         or (start_name_idx < stop_name_idx)
     )
+    #print(">> Get_subgraph")
     expr = get_subgraph(expr, start_name, stop_name, start_name_idx, stop_name_idx, count_meta)
+    #print("=====Second==Expr====")
+    #print(expr)
+    
+    #print(">> Run_optpass")
     expr = run_opt_pass(expr, transform.InferType())
+    #print("=====Third===Expr====")
+    #print(expr)
+    
+    #print(">> Packer construct")
     packer = ExprPack(bfactor, cfactor, weight_bits)
+
+    #print(">> Packer activate")
     expr = packer.visit(expr)
+    #print("=====Forth===Expr====")
+    #print(expr)
+
+    #print(">> Run optpass")
     assert not packer.start_pack
     expr = run_opt_pass(expr, transform.InferType())
+    #print("=====Fifth===Expr====")
+    #print(expr)
 
     if device_annot:
         expr_locator = ExprLocator()

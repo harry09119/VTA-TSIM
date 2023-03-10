@@ -30,6 +30,8 @@ from ..environment import get_env
 @autotvm.register_topi_compute("conv2d_packed.vta")
 def conv2d_packed(cfg, data, kernel, strides, padding, dilation, layout, out_dtype):
     """Packed conv2d function."""
+    #SHB
+    print("> [data]:",data.shape," | [kernel]:",kernel.shape," | [stride]:",strides)
     if not is_packed_layout(layout):
         raise topi.InvalidShapeError()
     assert dilation == (1, 1)
@@ -43,9 +45,11 @@ def conv2d_packed(cfg, data, kernel, strides, padding, dilation, layout, out_dty
     oheight = topi.utils.get_const_int((pad_data.shape[2] - kernel.shape[2]) // strides[0] + 1)
     owidth = topi.utils.get_const_int((pad_data.shape[3] - kernel.shape[3]) // strides[1] + 1)
     oshape = (data.shape[0], kernel.shape[0], oheight, owidth, data.shape[4], kernel.shape[4])
-
     ishape = topi.utils.get_const_tuple(data.shape)
+    #SHB
+    print("> [out]:",oshape," [in]:",ishape)
     kshape = topi.utils.get_const_tuple(kernel.shape)
+    print("> [new kernel]:",kshape)
     d_i = te.reduce_axis((0, kshape[2]), name="d_i")
     d_j = te.reduce_axis((0, kshape[3]), name="d_j")
     k_o = te.reduce_axis((0, ishape[1]), name="k_o")
@@ -70,12 +74,13 @@ def conv2d_packed(cfg, data, kernel, strides, padding, dilation, layout, out_dty
         * ishape[1]
         * ishape[-1]
     )
-
+    #print("> res: ", res)
     return res
 
 
 @autotvm.register_topi_schedule("conv2d_packed.vta")
 def schedule_conv2d_packed(cfg, outs):
+    print("> CFG\n",cfg,"\n\n")
     """Schedule packed conv2d"""
     assert len(outs) == 1
     output = outs[0]
@@ -87,6 +92,7 @@ def schedule_conv2d_packed(cfg, outs):
 
     def _traverse(op):
         if topi.tag.is_broadcast(op.tag):
+            #print("> Broadcast! \n",op,"\n-----------")
             if not op.same_as(output.op):
                 if not op.axis:
                     const_ops.append(op)
@@ -96,17 +102,23 @@ def schedule_conv2d_packed(cfg, outs):
                 if isinstance(tensor.op, tvm.te.PlaceholderOp):
                     ewise_inputs.append((op, tensor))
                 else:
+                    #print(">> tensor.op------------")
                     _traverse(tensor.op)
+            #print("------------------------")
         else:
+            #print("> Conv2d! \n",op)
             assert op.tag == "conv2d_dense"
             conv2d_res.append(op)
 
+    #print("> Tag: ",output.op.tag)
     _traverse(output.op)
+    #print("> OP: ",output.op)
     assert len(conv2d_res) == 1
     conv2d_stage = conv2d_res[0].output(0)
+    #print("\n> conv2d_res:",conv2d_res)
     s = te.create_schedule(output.op)
-
     ##### space definition begin #####
+    #print("> Axis:",s[conv2d_stage].op.axis)
     b, c_o, x_i, x_j, _, _ = s[conv2d_stage].op.axis
     c_i, _, _, _ = s[conv2d_stage].op.reduce_axis
     cfg.define_split("tile_b", b, num_outputs=2)
@@ -146,20 +158,25 @@ def schedule_conv2d_packed(cfg, outs):
     for op in ewise_ops:
         s[op].set_scope(env.acc_scope)
         s[op].pragma(s[op].op.axis[0], env.alu)
+        #print("> ALU:",s[op])
 
     for op in const_ops:
         s[op].compute_inline()
 
     # tile
     x_bo, x_co, x_i, x_j, x_bi, x_ci = s[output].op.axis
+    #print("> Axis22:", x_bo, x_co, x_i, x_j, x_bi, x_ci)
+
     x_co0, x_co1 = cfg["tile_co"].apply(s, output, x_co)
     x_i0, x_i1 = cfg["tile_h"].apply(s, output, x_i)
     x_j0, x_j1 = cfg["tile_w"].apply(s, output, x_j)
     s[output].reorder(x_bo, x_i0, x_co0, x_j0, x_co1, x_i1, x_j1, x_bi, x_ci)
+    #print("> new axis: ",x_bo, x_i0, x_co0, x_j0, x_co1, x_i1, x_j1, x_bi, x_ci)
     store_pt = x_j0
 
     # set all compute scopes
     s[conv2d_stage].compute_at(s[output], store_pt)
+    #print("> ewise_ops:",ewise_ops)
     for op in ewise_ops:
         s[op].compute_at(s[output], store_pt)
 
@@ -181,7 +198,14 @@ def schedule_conv2d_packed(cfg, outs):
 
     x_bo, x_co, x_i, x_j, x_bi, x_ci = s[conv2d_stage].op.axis
     k_o, d_i, d_j, k_i = s[conv2d_stage].op.reduce_axis
+    
+    #print("\n> BEFORE\n",s[conv2d_stage].op)
     s[conv2d_stage].reorder(x_bo, k_o, x_j, d_j, d_i, x_co, x_i, x_bi, x_ci, k_i)
+    #print("> AFTER\n",s[conv2d_stage].op)
+    #print("> cdata: ",cdata)
+    #print("> ckernel: ",ckernel)
+    #print("> conv2d_stage: ",conv2d_stage)
+    #print("> output: ",output)
 
     k_o, _ = cfg["tile_ci"].apply(s, conv2d_stage, k_o)
     s[cdata].compute_at(s[conv2d_stage], k_o)
@@ -192,5 +216,22 @@ def schedule_conv2d_packed(cfg, outs):
     s[ckernel].pragma(s[ckernel].op.axis[0], env.dma_copy)
     s[conv2d_stage].tensorize(x_bi, env.gemm)
     s[output].pragma(x_co1, env.dma_copy)
-
+    
+    def printing(op):
+        if topi.tag.is_broadcast(op.tag):
+            print("> Broadcast! \n",s[op],"\n-----------")
+            for tensor in op.input_tensors:
+                if isinstance(tensor.op, tvm.te.PlaceholderOp):
+                    pass
+                else:
+                    print(">> tensor.op------------")
+                    printing(tensor.op)
+            print("------------------------")
+        else:
+            print("> Conv2d! \n",s[op])
+    
+    print("==========")
+    printing(output.op)
+    print("> conv2d_stage",s[conv2d_stage])
+    print("==========")
     return s

@@ -107,6 +107,7 @@ std::string GraphExecutorDebug::RunIndividualNode(int node_index, int number, in
 
   // assume host runs things which is first device
   Device& d = devices_[0];
+  std::cout << "\n> "  << node_index  << std::endl;
   PackedFunc time_evaluator = profiling::WrapTimeEvaluator(
       TypedPackedFunc<void()>([this, node_index]() { this->RunOpHost(node_index); }), d, number,
       repeat, min_repeat_ms, limit_zero_time_iterations, cooldown_interval_ms, repeats_to_cooldown);
@@ -195,7 +196,8 @@ Timer GraphExecutorDebug::RunOpHost(int index) {
 PackedFunc GraphExecutorDebug::GetFunction(const std::string& name,
                                            const ObjectPtr<Object>& sptr_to_self) {
   // return member functions during query.
-  if (name == "debug_get_output") {
+  printf("\n [%s]\n",name.c_str());
+    if (name == "debug_get_output") {
     return PackedFunc([sptr_to_self, this](TVMArgs args, TVMRetValue* rv) {
       if (String::CanConvertFrom(args[0])) {
         this->DebugGetNodeOutput(this->GetNodeIndex(args[0]), args[1]);
@@ -249,6 +251,7 @@ PackedFunc GraphExecutorDebug::GetFunction(const std::string& name,
       ICHECK_GE(limit_zero_time_iterations, 0);
       ICHECK_GE(cooldown_interval_ms, 0);
       ICHECK_GT(repeats_to_cooldown, 0);
+      //std::cout << "\n <"<< node_index << ">\n" << std::endl;
       std::string blob = this->RunIndividualNode(node_index, number, repeat, min_repeat_ms,
                                                  limit_zero_time_iterations, cooldown_interval_ms,
                                                  repeats_to_cooldown);
@@ -263,7 +266,7 @@ PackedFunc GraphExecutorDebug::GetFunction(const std::string& name,
           // We cannot send Arrays over rpc, so in order to support profiling
           // on remotes, we accept a nullptr for collectors.
           if (collectors.defined()) {
-            return this->Profile(collectors);
+	    return this->Profile(collectors);
           } else {
             return this->Profile({});
           }
@@ -343,15 +346,15 @@ profiling::Report GraphExecutorDebug::Profile(Array<profiling::MetricCollector> 
   prof.Start();
   for (size_t i = 0; i < op_execs_.size(); ++i) {
     if (op_execs_[i]) {
-      // get argument shapes
-      std::vector<NDArray> shapes;
+      	// get argument shapes
+      	std::vector<NDArray> shapes;
       for (const auto& e : nodes_[i].inputs) {
-        uint32_t eid = entry_id(e);
-        shapes.push_back(data_entry_[eid]);
+	uint32_t eid = entry_id(e);
+	shapes.push_back(data_entry_[eid]);
       }
       for (uint32_t j = 0; j < nodes_[i].param.num_outputs; ++j) {
-        uint32_t eid = entry_id(i, j);
-        shapes.push_back(data_entry_[eid]);
+	uint32_t eid = entry_id(i, j);
+	shapes.push_back(data_entry_[eid]);
       }
 
       uint32_t eid = entry_id(i, 0);
@@ -359,12 +362,12 @@ profiling::Report GraphExecutorDebug::Profile(Array<profiling::MetricCollector> 
 
       std::unordered_map<std::string, ObjectRef> metrics;
       for (auto p : nodes_[i].param.attrs) {
-        if (std::string(p.first).find("layout") != std::string::npos) {
-          metrics[p.first] = p.second;
-        }
+	if (std::string(p.first).find("layout") != std::string::npos) {
+	  metrics[p.first] = p.second;
+	}
       }
       if (nodes_[i].param.attrs.find("hash") != nodes_[i].param.attrs.end()) {
-        metrics["Hash"] = Downcast<String>(nodes_[i].param.attrs.at("hash"));
+	metrics["Hash"] = Downcast<String>(nodes_[i].param.attrs.at("hash"));
       }
       metrics["Argument Shapes"] = profiling::ShapeString(shapes);
       prof.StartCall(nodes_[i].param.func_name, dev, metrics);

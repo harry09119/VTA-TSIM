@@ -32,7 +32,7 @@ def test_save_load_out():
     """Test save/store output command"""
 
     def _run(env, remote):
-        n = 6
+        n = 16
         x = te.placeholder((n, n, env.BATCH, env.BLOCK_OUT), name="x", dtype=env.acc_dtype)
         x_buf = te.compute((n, n, env.BATCH, env.BLOCK_OUT), lambda *i: x(*i), "x_buf")
         # insert no-op that won't be optimized away
@@ -47,6 +47,7 @@ def test_save_load_out():
         s[y_buf].set_scope(env.acc_scope)
         s[y_buf].pragma(y_buf.op.axis[0], env.alu)
         s[y].pragma(y.op.axis[0], env.dma_copy)
+        
 
         # verification
         with vta.build_config():
@@ -550,7 +551,7 @@ def test_shift_and_scale():
 
 def test_runtime_array():
     def _run(env, remote):
-        n = 100
+        n = 224
         dev = remote.ext_dev(0)
         x_np = np.random.randint(1, 10, size=(n, n, env.BATCH, env.BLOCK_OUT)).astype("int8")
         x_nd = tvm.nd.array(x_np, dev)

@@ -62,7 +62,8 @@ def create(graph_json_str, libmod, device):
         fcreate = dev[0]._rpc_sess.get_function("tvm.graph_executor.create")
     else:
         fcreate = tvm._ffi.get_global_func("tvm.graph_executor.create")
-
+    m = fcreate(graph_json_str, libmod, *device_type_id)
+    print("\n==> ",m["run"])
     return GraphModule(fcreate(graph_json_str, libmod, *device_type_id))
 
 

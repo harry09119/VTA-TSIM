@@ -371,6 +371,8 @@ def build(
             constant_memory_pools=constant_memory_pools,
             mod_name=mod_name,
         )
+        #print(">>>> graph_json <<<<")
+        #print(graph_json)
         func_metadata = bld_mod.get_function_metadata()
         devices = bld_mod.get_devices()
         lowered_ir_mods = bld_mod.get_irmodule()

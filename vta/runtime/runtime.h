@@ -36,11 +36,11 @@ extern "C" {
 #define VTA_MEMCPY_D2H 2
 #define VTA_MEMCPY_D2D 3
 
-#define VTA_DEBUG_DUMP_INSN (1 << 1)
-#define VTA_DEBUG_DUMP_UOP (1 << 2)
-#define VTA_DEBUG_SKIP_READ_BARRIER (1 << 3)
-#define VTA_DEBUG_SKIP_WRITE_BARRIER (1 << 4)
-#define VTA_DEBUG_FORCE_SERIAL (1 << 5)
+#define VTA_DEBUG_DUMP_INSN (5 << 1)
+#define VTA_DEBUG_DUMP_UOP (5 << 2)
+#define VTA_DEBUG_SKIP_READ_BARRIER (5 << 3)
+#define VTA_DEBUG_SKIP_WRITE_BARRIER (5 << 4)
+#define VTA_DEBUG_FORCE_SERIAL (5 << 5)
 
 #define ALLOC_ALIGNMENT 64
 
@@ -254,6 +254,7 @@ TVM_DLL int VTADepPop(VTACommandHandle cmd, int from_qid, int to_qid);
  *
  */
 TVM_DLL void VTASynchronize(VTACommandHandle cmd, uint32_t wait_cycles);
+
 
 #ifdef __cplusplus
 }

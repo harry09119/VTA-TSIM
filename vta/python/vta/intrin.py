@@ -84,6 +84,7 @@ def gemm(env, mock=False):
         offset_factor=out_lanes,
         data_alignment=out_lanes,
     )
+    #print("\/\/\/\/\n",inp_layout)
 
     def intrin_func(ins, outs):
         """Matrix-matrix multiply intrinsic function"""

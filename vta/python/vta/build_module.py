@@ -34,7 +34,7 @@ def EarlyRewrite():
     return tvm.transform.module_pass(_transform, opt_level=0, name="tir.vta.EarlyRewrite")
 
 
-def build_config(debug_flag=0, **kwargs):
+def build_config(debug_flag=1, **kwargs):
     """Build a build config for VTA.
 
     Parameters

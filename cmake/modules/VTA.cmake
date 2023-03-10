@@ -87,6 +87,11 @@ elseif(PYTHON)
     # Add tsim driver sources
     tvm_file_glob(GLOB TSIM_RUNTIME_SRCS ${VTA_HW_PATH}/src/*.cc)
     tvm_file_glob(GLOB TSIM_RUNTIME_SRCS vta/runtime/*.cc)
+    #SHB: ADD
+    #list(APPEND TSIM_RUNTIME_SRCS ${VERILATOR_INC_DIR}/verilated.cpp)
+    #list(APPEND TSIM_RUNTIME_SRCS ${VERILATOR_INC_DIR}/verilated_dpi.cpp)
+    list(APPEND TSIM_RUNTIME_SRCS ${VERILATOR_INC_DIR}/vltstd/svdpi.h)
+    #SHB: ===
     list(APPEND TSIM_RUNTIME_SRCS ${VTA_HW_PATH}/src/tsim/tsim_driver.cc)
     list(APPEND TSIM_RUNTIME_SRCS ${VTA_HW_PATH}/src/dpi/module.cc)
     list(APPEND TSIM_RUNTIME_SRCS ${VTA_HW_PATH}/src/vmem/virtual_memory.cc)

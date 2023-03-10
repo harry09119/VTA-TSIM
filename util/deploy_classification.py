@@ -63,7 +63,7 @@ from vta.top import graph_pack
 
 # Make sure that TVM was compiled with RPC=1
 assert tvm.runtime.enabled("rpc")
-print("> Start")
+
 ######################################################################
 # Define the platform and model targets
 # -------------------------------------
@@ -100,42 +100,12 @@ assert model in pack_dict
 # When target is 'pynq', reconfigure FPGA and runtime.
 # Otherwise, if target is 'sim', execute locally.
 
-if env.TARGET not in ["sim", "tsim", "intelfocl"]:
-
-    # Get remote from tracker node if environment variable is set.
-    # To set up the tracker, you'll need to follow the "Auto-tuning
-    # a convolutional network for VTA" tutorial.
-    tracker_host = os.environ.get("TVM_TRACKER_HOST", None)
-    tracker_port = os.environ.get("TVM_TRACKER_PORT", None)
-    # Otherwise if you have a device you want to program directly from
-    # the host, make sure you've set the variables below to the IP of
-    # your board.
-    device_host = os.environ.get("VTA_RPC_HOST", "192.168.2.99")
-    device_port = os.environ.get("VTA_RPC_PORT", "9091")
-    if not tracker_host or not tracker_port:
-        remote = rpc.connect(device_host, int(device_port))
-    else:
-        remote = autotvm.measure.request_remote(
-            env.TARGET, tracker_host, int(tracker_port), timeout=10000
-        )
-
-    # Reconfigure the JIT runtime and FPGA.
-    # You can program the FPGA with your own custom bitstream
-    # by passing the path to the bitstream file instead of None.
-    reconfig_start = time.time()
-    vta.reconfig_runtime(remote)
-    vta.program_fpga(remote, bitstream=None)
-    reconfig_time = time.time() - reconfig_start
-    print("Reconfigured FPGA and RPC runtime in {0:.2f}s!".format(reconfig_time))
-
 # In simulation mode, host the RPC server locally.
-else:
-    print("> Run Local")
-    remote = rpc.LocalSession()
+remote = rpc.LocalSession()
 
-    if env.TARGET in ["intelfocl"]:
-        # program intelfocl aocx
-        vta.program_fpga(remote, bitstream="vta.bitstream")
+if env.TARGET in ["intelfocl"]:
+    # program intelfocl aocx
+    vta.program_fpga(remote, bitstream="vta.bitstream")
 
 # Get execution context from remote
 ctx = remote.ext_dev(0) if device == "vta" else remote.cpu(0)
@@ -165,14 +135,13 @@ with autotvm.tophub.context(target):
 
     # Get off the shelf gluon model, and convert to relay
     gluon_model = vision.get_model(model, pretrained=True)
-    print("> Load MXNET resnet18")
+
     # Measure build start time
     build_start = time.time()
 
     # Start front end compilation
     mod, params = relay.frontend.from_mxnet(gluon_model, shape_dict)
     print(mod)
-    print("> Generate graph from resnet18")
     # Update shape and type dictionary
     shape_dict.update({k: v.shape for k, v in params.items()})
     dtype_dict.update({k: str(v.dtype) for k, v in params.items()})
@@ -183,7 +152,6 @@ with autotvm.tophub.context(target):
         with tvm.transform.PassContext(opt_level=3):
             with relay.quantize.qconfig(global_scale=8.0, skip_conv_layers=[0]):
                 mod = relay.quantize.quantize(mod, params=params)
-                print("> Quantize model")
             # Perform graph packing and constant folding for VTA target
             assert env.BLOCK_IN == env.BLOCK_OUT
             # do device annotation if target is intelfocl or sim
@@ -196,10 +164,9 @@ with autotvm.tophub.context(target):
                 stop_name=pack_dict[model][1],
                 device_annot=(env.TARGET == "intelfocl"),
             )
-            print("> Pack resnet18 graph for VTA")
     else:
         relay_prog = mod["main"]
-
+    print(relay_prog)
     # Compile Relay program with AlterOpLayout disabled
     if target.device_name != "vta":
         with tvm.transform.PassContext(opt_level=3, disabled_pass={"AlterOpLayout"}):
@@ -216,10 +183,24 @@ with autotvm.tophub.context(target):
             graph, lib, params = relay.build(
                 relay_prog, target=tvm.target.Target(target, host=env.target_host), params=params
             )
+    #print("=====================")
+    #print(graph)
+    #print("=====================")
+    #print(lib.get_source())
+    #print(params)
+    """
+        import pdb; pdb.set_trace()
+        graph, lib, params = relay.build(
+            #relay_prog, target=tvm.target.Target(target, host=env.target_host), params=params
+            relay_prog, target=tvm.target.Target(target, host="c"), params=params
+        )
 
+        import pdb; pdb.set_trace()
+        print(lib.get_source())
+    """
     # Measure Relay build time
     build_time = time.time() - build_start
-    print("> ",model + " inference graph built in {0:.2f}s!".format(build_time))
+    print(model + " inference graph built in {0:.2f}s!".format(build_time))
 
     # Send the inference library over to the remote RPC server
     temp = utils.tempdir()
@@ -233,7 +214,7 @@ with autotvm.tophub.context(target):
     else:
         # Graph runtime
         m = graph_executor.create(graph, lib, ctx)
-
+    
 ######################################################################
 # Perform image classification inference
 # --------------------------------------
@@ -254,8 +235,8 @@ download.download(image_url, image_fn)
 
 # Prepare test image for inference
 image = Image.open(image_fn).resize((224, 224))
-plt.imshow(image)
-plt.show()
+#plt.imshow(image)
+#plt.show()
 image = np.array(image) - np.array([123.0, 117.0, 104.0])
 image /= np.array([58.395, 57.12, 57.375])
 image = image.transpose((2, 0, 1))
@@ -268,8 +249,9 @@ m.set_input("data", image)
 
 # Perform inference and gather execution statistics
 # More on: :py:method:`tvm.runtime.Module.time_evaluator`
-num = 4  # number of times we run module for a single measurement
-rep = 3  # number of measurements (we derive std dev from this)
+
+num = 1  # number of times we run module for a single measurement
+rep = 1  # number of measurements (we derive std dev from this)
 timer = m.module.time_evaluator("run", ctx, number=num, repeat=rep)
 
 if env.TARGET in ["sim", "tsim"]:
@@ -290,7 +272,10 @@ else:
     print("Average per sample inference time: %.2fms" % (mean / env.BATCH))
 
 # Get classification results
-tvm_output = m.get_output(0, tvm.nd.empty((env.BATCH, 1000), "float32", remote.cpu(0)))
+output = m.get_output(0, tvm.nd.empty((env.BATCH, 1000), "float32", remote.cpu(0)))
+output = np.argsort(output.numpy())
+print(output[0][-11:-1])
+"""
 for b in range(env.BATCH):
     top_categories = np.argsort(tvm_output.numpy()[b])
     # Report top-5 classification results
@@ -310,3 +295,4 @@ for b in range(env.BATCH):
         if "cat" in synset[k]:
             cat_detected = True
     assert cat_detected
+"""

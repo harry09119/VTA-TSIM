@@ -167,5 +167,5 @@ def schedule_dense_packed(cfg, outs):
     s[cweight].pragma(s[cweight].op.axis[0], env.dma_copy)
     s[dense_stage].tensorize(x_bi, env.gemm)
     s[output].pragma(x_ci, env.dma_copy)
-
+    #print(">>>>>>>>>>>>>>>>>>Here!<<<<<<<<<<<<<<<<<<<<<<\n",s)
     return s
